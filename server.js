@@ -109,72 +109,72 @@ function parseMetrics() {
   const file = readFile(path.join(WORKSPACE, 'metrics/loop-metrics.md'));
   if (!file) return { sections: [], progressionSignals: [], lastRun: null, selfCorrectionRate: null };
 
+  // Read METRICS comment: <!-- METRICS: quickSessions=N hardSessions=N totalIssues=N -->
+  const metricsMatch = file.match(/<!-- METRICS: quickSessions=(\d+) hardSessions=(\d+) totalIssues=(\d+) -->/);
+  const quickSessions = metricsMatch ? parseInt(metricsMatch[1]) : 0;
+  const hardSessions = metricsMatch ? parseInt(metricsMatch[2]) : 0;
+  const totalSessions = metricsMatch ? parseInt(metricsMatch[3]) : 0;
+  const selfCorrectionRate = totalSessions > 0 ? Math.round((quickSessions / totalSessions) * 100) : null;
 
-  const lines = file.split('\n');
+  // Parse sections from Session Detail headings (last 20)
+  const fileLines = file.split('\n');
   const sections = [];
   let current = null;
-  const progressionSignals = [];
-  let lastRun = null;
-  let quickSessions = 0, hardSessions = 0;
-
-  for (const line of lines) {
-    const m = line.match(/^#{2,3} (Issue #(\d+)|Monthly Pattern Analysis)/);
+  for (const line of fileLines) {
+    const m = line.match(/^#{3} Issue #(\d+) — (.+)$/);
     if (m) {
       if (current) sections.push(current);
-      current = { title: m[1], issueNum: m[2] || null, sessions: null, progressionSignals: [], notes: '' };
-    }
-    const signal = line.match(/^\| (\d{4}-\d{2}-\d{2}) \| #(\d+) \| (\w+) \| Sessions: (\d+) \|/);
-    if (signal && (signal[3] === 'implement' || signal[4] >= '4')) {
-      progressionSignals.push({ date: signal[1], issue: signal[2], step: signal[3], sessions: signal[4] });
-    }
-    const run = line.match(/\*Run: (.+)\*/);
-    if (run) lastRun = run[1];
-    // Match sessions in bullet format: - Sessions: N
-    const mBullet = line.match(/^-\s*Sessions:\s*([0-9]+)/);
-    if (mBullet) {
-      const n = parseInt(mBullet[1]);
-      if (n <= 3) quickSessions++;
-      else hardSessions++;
-      if (current && !current.sessions) current.sessions = 'Sessions: ' + n;
+      current = { title: m[1], issueNum: m[1], repo: m[2], sessions: null, progressionSignals: [], notes: '' };
     }
   }
   if (current) sections.push(current);
-  const total = quickSessions + hardSessions;
-  const selfCorrectionRate = total > 0 ? Math.round((quickSessions / total) * 100) : null;
-  return { sections, progressionSignals, lastRun, selfCorrectionRate, quickSessions, hardSessions, totalSessions: total };
+
+  // Parse progression signals from Progression Signals section
+  const progressionSignals = [];
+  let inProg = false;
+  for (const line of fileLines) {
+    if (line.startsWith('## Progression Signals')) { inProg = true; continue; }
+    if (inProg && line.startsWith('## ')) break;
+    if (inProg && line.startsWith('| ')) {
+      const cols = line.split('|').map(c => c.trim()).filter(Boolean);
+      if (cols.length >= 5 && cols[0] !== 'Date') {
+        progressionSignals.push({ date: cols[0], issue: cols[1].replace('#',''), sessions: cols[3] });
+      }
+    }
+  }
+
+  return { sections, progressionSignals, lastRun: null, selfCorrectionRate, quickSessions, hardSessions, totalSessions };
 }
 
 async function getConvergenceRate() {
-  // Compute from local files as proxy for convergence rate
-  // True convergence rate = issues reaching Done / issues started (30d)
-  // Proxy: issues with failure log entries = issues seriously worked on
   try {
     const metricsFile = readFile(path.join(WORKSPACE, 'metrics/loop-metrics.md'));
-    const failureFile = readFile(path.join(WORKSPACE, 'code-standards/failure-mode-log.md'));
     if (!metricsFile) return null;
 
-    // Count issues in loop-metrics (total worked on in this system)
-    const issueMatches = metricsFile.match(/^#{1,3} Issue #(\d+)/gm);
-    const totalIssues = issueMatches ? issueMatches.length : 0;
+    // Read total issues from METRICS comment
+    const metricsMatch = metricsFile.match(/<!-- METRICS: quickSessions=(\d+) hardSessions=(\d+) totalIssues=(\d+) -->/);
+    const totalIssues = metricsMatch ? parseInt(metricsMatch[3]) : 0;
 
-    // Count unique issues with failure log entries (seriously worked on)
-    const failureLines = failureFile.match(/^\| \d{4}-\d{2}-\d{2} \| #(\d+)/gm);
-    const uniqueFailedIssues = new Set();
-    if (failureLines) {
-      for (const line of failureLines) {
-        const m = line.match(/^\| \d{4}-\d{2}-\d{2} \| #(\d+)/);
-        if (m) uniqueFailedIssues.add(m[1]);
+    // Count issues with at least 1 completion from Issue Summary table
+    // Format: | Date | #XXX | repo | Starts | Completions | Errors | Skips |
+    const tableLines = metricsFile.split('\n');
+    let completedIssues = 0;
+    for (const line of tableLines) {
+      const cols = line.split('|').map(c => c.trim()).filter(Boolean);
+      // cols: ['', 'Date', '#XXX', 'repo', 'Starts', 'Completions', 'Errors', 'Skips', '']
+      // We need cols[5] = Completions (0-indexed)
+      if (cols.length >= 6 && cols[1] && cols[1].startsWith('#')) {
+        const dones = parseInt(cols[4]) || 0;
+        if (dones >= 1) completedIssues++;
       }
     }
-    const completedIssues = uniqueFailedIssues.size;
 
-    // Convergence rate: % of worked-on issues that had failures captured (proxy for engagement)
-    // Note: This is a process metric, not a completion metric
-    const rate = totalIssues > 0 && completedIssues > 0
-      ? Math.min(100, Math.round((completedIssues / totalIssues) * 100))
-      : (totalIssues > 0 ? 0 : null);
-    return { convergenceRate: rate, completedIssues: completedIssues, totalIssues: totalIssues };
-  } catch {
+    const rate = totalIssues > 0
+      ? Math.round((completedIssues / totalIssues) * 100)
+      : null;
+    return { convergenceRate: rate, completedIssues, totalIssues };
+  } catch(e) {
+    console.error('getConvergenceRate error:', e.message);
     return null;
   }
 }
@@ -550,9 +550,9 @@ function render(d) {
 
   document.getElementById('session-metrics').innerHTML =
     '<div class="metric-row">' +
-    '<div class="metric"><div class="metric-value">' + secs.length + '</div><div class="metric-label">Issues tracked</div></div>' +
+    '<div class="metric"><div class="metric-value">' + (metrics?.totalSessions || 0) + '</div><div class="metric-label">Issues tracked</div></div>' +
     '<div class="metric"><div class="metric-value" style="color:' + scrColor + '">' + (scr !== null ? scr + '%' : '—') + '</div><div class="metric-label">Correct 1st try</div></div>' +
-    '<div class="metric"><div class="metric-value">' + (d.metrics?.hardSessions || 0) + '</div><div class="metric-label">Needed revision (4+)</div></div>' +
+    '<div class="metric"><div class="metric-value">' + ((d.metrics?.hardSessions || 0) || 0) + '</div><div class="metric-label">Needed revision (4+)</div></div>' +
     '</div>';
 
   // Convergence rate
@@ -713,7 +713,7 @@ const server = http.createServer(async (req, res) => {
     const secs = metrics?.sections || [];
     const scr = metrics?.selfCorrectionRate;
     const scrColor = scr === null ? '#64748b' : scr >= 80 ? '#22c55e' : scr >= 60 ? '#f59e0b' : '#ef4444';
-    const sessionMetricsHTML = '<div class="metric-row"><div class="metric"><div class="metric-value">' + secs.length + '</div><div class="metric-label">Issues tracked</div></div><div class="metric"><div class="metric-value" style="color:' + scrColor + '">' + (scr !== null ? scr + '%' : '—') + '</div><div class="metric-label">Correct 1st try</div></div><div class="metric"><div class="metric-value">' + (metrics?.hardSessions || 0) + '</div><div class="metric-label">Needed revision (4+)</div></div></div>';
+    const sessionMetricsHTML = '<div class="metric-row"><div class="metric"><div class="metric-value">' + (metrics?.totalSessions || 0) + '</div><div class="metric-label">Issues tracked</div></div><div class="metric"><div class="metric-value" style="color:' + scrColor + '">' + (scr !== null ? scr + '%' : '—') + '</div><div class="metric-label">Correct 1st try</div></div><div class="metric"><div class="metric-value">' + (metrics?.hardSessions || 0) + '</div><div class="metric-label">Needed revision (4+)</div></div></div>';
     html = html.replace('<div id="session-metrics"><div class="no-data">Loading...</div></div>', '<div id="session-metrics">' + sessionMetricsHTML + '</div>');
     // Convergence rate
     const convRate = metrics?.convergenceRate;
