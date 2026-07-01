@@ -379,6 +379,7 @@ function render(html) {
 
   /* Responsive: Mobile */
   @media (max-width: 768px) {
+    body, .grid { box-sizing: border-box; } .grid { padding-right: 16px; }
     .grid { grid-template-columns: 1fr !important; }
     .cron-panel { max-height: 300px; }
     .right-panels .panel-row { flex-direction: column; }
