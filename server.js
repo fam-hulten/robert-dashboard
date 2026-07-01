@@ -312,8 +312,13 @@ function render(html) {
   h2 { font-size: 16px; font-weight: 600; margin-bottom: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; }
   h3 { font-size: 14px; font-weight: 600; color: #e2e8f0; margin-bottom: 6px; }
   
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; }
-  .card { background: #1a1d27; border-radius: 12px; padding: 20px; border: 1px solid #2d3348; }
+  .grid { display: grid; grid-template-columns: 320px 1fr; gap: 20px; align-items: start; }
+  .right-panels { display: flex; flex-direction: column; gap: 20px; }
+  .right-panels .card { margin-bottom: 0; }
+  .cron-panel { max-height: calc(100vh - 100px); overflow-y: auto; }
+  .right-panels .panel-row { display: flex; gap: 20px; flex-wrap: wrap; }
+  .right-panels .panel-row .card { flex: 1; min-width: 200px; }
+  .card { background:#1a1d27; border-radius: 12px; padding: 20px; border: 1px solid #2d3348; }
   .card-full { grid-column: 1 / -1; }
   
   .status-ok { color: #22c55e; }
@@ -360,48 +365,50 @@ function render(html) {
 <h1>Robert — Loop Health Dashboard</h1>
 
 <div class="grid">
-  <!-- Cron Jobs -->
-  <div class="card">
+  <!-- Cron Jobs — left sidebar -->
+  <div class="card cron-panel">
     <h2>Cron Jobs</h2>
     <div id="cron-list"><div class="no-data">Loading...</div></div>
   </div>
 
-  <!-- Failure Summary -->
-  <div class="card">
-    <h2>Failure Patterns (30d)</h2>
-    <div id="failure-summary"><div class="no-data">Loading...</div></div>
-  </div>
+  <!-- Right column — all other panels -->
+  <div class="right-panels">
 
-  <!-- Progression Signals -->
-  <div class="card">
-    <h2>Progression Signals</h2>
-    <div id="progression"><div class="no-data">Loading...</div></div>
-  </div>
+    <!-- Row: Failure + Progression + Session -->
+    <div class="panel-row">
+      <div class="card">
+        <h2>Failure Patterns (30d)</h2>
+        <div id="failure-summary"><div class="no-data">Loading...</div></div>
+      </div>
+      <div class="card">
+        <h2>Progression Signals</h2>
+        <div id="progression"><div class="no-data">Loading...</div></div>
+      </div>
+      <div class="card">
+        <h2>Session Metrics</h2>
+        <div id="session-metrics"><div class="no-data">Loading...</div></div>
+      </div>
+    </div>
 
-  <!-- Session Metrics -->
-  <div class="card">
-    <h2>Session Metrics</h2>
-    <div id="session-metrics"><div class="no-data">Loading...</div></div>
-  </div>
+    <!-- Row: Convergence + Planning Gate -->
+    <div class="panel-row">
+      <div class="card">
+        <h2>Convergence Rate</h2>
+        <div id="convergence-rate"><div class="no-data">Loading...</div></div>
+      </div>
+      <div class="card">
+        <h2>Johanna's Plan Gate</h2>
+        <div id="planning-gate"><div class="no-data">Loading...</div></div>
+      </div>
+    </div>
 
+    <!-- Recent Failures -->
+    <div class="card">
+      <h2>Recent Failure Entries</h2>
+      <div id="recent-failures"><div class="no-data">Loading...</div></div>
+    </div>
 
-  <!-- Convergence Rate -->
-  <div class="card">
-    <h2>Convergence Rate</h2>
-    <div id="convergence-rate"><div class="no-data">Loading...</div></div>
-  </div>
-
-  <!-- Planning Gate -->
-  <div class="card">
-    <h2>Johanna's Plan Gate</h2>
-    <div id="planning-gate"><div class="no-data">Loading...</div></div>
-  </div>
-
-  <!-- Recent Failures -->
-  <div class="card card-full">
-    <h2>Recent Failure Entries</h2>
-    <div id="recent-failures"><div class="no-data">Loading...</div></div>
-  </div>
+  </div><!-- end right-panels -->
 </div>
 
 <div class="updated" id="updated">—</div>
@@ -443,6 +450,8 @@ async function load() {
 
 
 function fmtAge(ms) {
+  // If ms looks like a raw Unix timestamp (too large for elapsed ms), convert to elapsed
+  if (ms > 1e12) ms = Date.now() - ms;
   if (!ms) return '—';
   const s = Math.floor(ms / 1000);
   if (s < 60) return s + 's ago';
