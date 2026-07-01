@@ -66,7 +66,20 @@ async function getGatewayCronJobs() {
   try {
     const data = JSON.parse(output);
     const jobs = data.jobs || [];
-    return jobs.map(j => ({
+    const DEV_WORKFLOW = [
+      'development-planning-cron',
+      'development-implementation-cron',
+      'development-ai-review-cron',
+      'development-create-pr-cron',
+      'development-fix-pr-cron',
+      'manual-pr-merge',
+      'Run the pr-review-pick skill to find the next open PR needi…',
+      'Run the plan-review-pick skill to find the next issue needi…',
+      'Run the post-merge-pick skill to find the next post-merge t…'
+    ];
+    return jobs
+    .filter(j => DEV_WORKFLOW.includes(j.name))
+    .map(j => ({
       name: (j.name || '').substring(0, 60),
       description: j.description || '',
       enabled: j.enabled,
