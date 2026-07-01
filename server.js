@@ -372,6 +372,28 @@ function render(html) {
   .refresh { font-size: 12px; color: #475569; }
   .refresh-indicator { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #22c55e; margin-right: 6px; animation: pulse 2s infinite; }
   @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+  /* Responsive: Tablet */
+  @media (max-width: 1024px) {
+    .grid { grid-template-columns: 260px 1fr !important; }
+  }
+
+  /* Responsive: Mobile */
+  @media (max-width: 768px) {
+    .grid { grid-template-columns: 1fr !important; }
+    .cron-panel { max-height: 300px; }
+    .right-panels .panel-row { flex-direction: column; }
+    .right-panels .panel-row .card { min-width: 100%; }
+    .card { padding: 12px; font-size: 13px; }
+    h1 { font-size: 18px; }
+    h2 { font-size: 14px; }
+    .cron-job { padding: 8px 10px; }
+    .cron-name { font-size: 12px; }
+    .cron-meta { font-size: 11px; }
+    .updated { font-size: 10px; }
+    .failure-table { font-size: 11px; }
+    .failure-table th, .failure-table td { padding: 6px 8px; }
+  }
+
 </style>
 </head>
 <body>
